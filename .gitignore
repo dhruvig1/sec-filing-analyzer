@@ -1,0 +1,12 @@
+# environment
+.env
+__pycache__/
+*.pyc
+*.pyo
+
+# data (too large for GitHub)
+data/
+embeddings/
+
+# mac
+.DS_Store
