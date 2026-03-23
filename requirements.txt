@@ -1,0 +1,15 @@
+streamlit
+langchain
+langchain-community
+langchain-huggingface
+faiss-cpu
+sentence-transformers
+groq
+boto3
+sec-edgar-downloader
+plotly
+python-dotenv
+openai
+requests
+yfinance
+huggingface_hub

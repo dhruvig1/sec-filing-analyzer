@@ -18,8 +18,8 @@ TICKERS = [
     "XOM", "CVX", "COP", "SLB",
     "WMT", "HD", "NKE", "MCD", "SBUX"
 ]
-DATA_DIR  = "data"
-INDEX_DIR = "embeddings/faiss_index"
+DATA_DIR  = os.path.join(os.path.expanduser("~/sec-analyzer"), "data")
+INDEX_DIR = os.path.join(os.path.expanduser("~/sec-analyzer"), "embeddings", "faiss_index")
 
 # STEP 2: DOWNLOAD FILINGS FROM SEC EDGAR
 def download_filings():
@@ -40,10 +40,10 @@ def load_and_chunk_filings():
             if idx != -1:
                 chunk = text[idx:idx+15000]
                 parts = filepath.split(os.sep)
-                ticker = parts[2] if len(parts) > 2 else "UNKNOWN"
+                ticker = parts[6] if len(parts) > 6 else "UNKNOWN"
                 
                 # extract year from accession folder name e.g. 0000019617-25-000270 → 2025
-                accession = parts[4] if len(parts) > 4 else ""
+                accession = parts[8] if len(parts) > 8 else ""
                 year_digits = accession.split("-")[1] if "-" in accession else "00"
                 year = int("20" + year_digits)
                 

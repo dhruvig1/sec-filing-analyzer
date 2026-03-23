@@ -292,19 +292,39 @@ with tab3:
             st.divider()
             st.subheader("Portfolio Summary")
 
-            high_risk  = [s["ticker"] for s in all_signals if s.get("risk_level") == "HIGH"]
-            bearish    = [s["ticker"] for s in all_signals if s.get("sentiment")  == "BEARISH"]
-            bullish    = [s["ticker"] for s in all_signals if s.get("sentiment")  == "BULLISH"]
+            high_risk   = [s["ticker"] for s in all_signals if s.get("risk_level") == "HIGH"]
+            medium_risk = [s["ticker"] for s in all_signals if s.get("risk_level") == "MEDIUM"]
+            low_risk    = [s["ticker"] for s in all_signals if s.get("risk_level") == "LOW"]
+            bearish     = [s["ticker"] for s in all_signals if s.get("sentiment")  == "BEARISH"]
+            bullish     = [s["ticker"] for s in all_signals if s.get("sentiment")  == "BULLISH"]
+            neutral     = [s["ticker"] for s in all_signals if s.get("sentiment")  == "NEUTRAL"]
             avg_risk   = round(sum(risk_scores) / len(risk_scores), 2)
 
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("High Risk Companies",  len(high_risk),  
+            #m1.metric("High Risk Companies",  len(high_risk),  
+            #          delta=", ".join(high_risk) if high_risk else "None")
+            #m2.metric("Bearish Companies",    len(bearish),    
+            #          delta=", ".join(bearish)   if bearish  else "None")
+            #m3.metric("Bullish Companies",    len(bullish),    
+            #          delta=", ".join(bullish)   if bullish  else "None")
+            #m4.metric("Avg Risk Score",       f"{avg_risk}/3")
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("High Risk",    len(high_risk),
                       delta=", ".join(high_risk) if high_risk else "None")
-            m2.metric("Bearish Companies",    len(bearish),    
-                      delta=", ".join(bearish)   if bearish  else "None")
-            m3.metric("Bullish Companies",    len(bullish),    
-                      delta=", ".join(bullish)   if bullish  else "None")
-            m4.metric("Avg Risk Score",       f"{avg_risk}/3")
+            m2.metric("Medium Risk",  len(medium_risk),
+                      delta=", ".join(medium_risk[:3]) if medium_risk else "None")
+            m3.metric("Low Risk",     len(low_risk),
+                      delta=", ".join(low_risk) if low_risk else "None")
+            m4.metric("⚖️ Avg Risk Score", f"{avg_risk}/3")
+
+            s1, s2, s3 = st.columns(3)
+            s1.metric("Bullish", len(bullish),
+                      delta=", ".join(bullish) if bullish else "None")
+            s2.metric("Neutral", len(neutral),
+                      delta=", ".join(neutral[:3]) if neutral else "None")
+            s3.metric("Bearish", len(bearish),
+                      delta=", ".join(bearish) if bearish else "None")
 
             # PER COMPANY BREAKDOWN
             st.divider()

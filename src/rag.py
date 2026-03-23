@@ -105,19 +105,19 @@ def get_context_from_file(ticker, year):
 def generate_signal(ticker, query="What are the major risk factors and investment outlook?", year=None):
     print(f"🔍 Retrieving context for {ticker} {f'({year})' if year else ''}...")
     
-    # if year specified, read directly from file instead of FAISS
-    if year:
-        context = get_context_from_file(ticker, year)
-        if not context:
-            return {"error": f"No filing found for {ticker} {year}"}
-    else:
-        vectorstore = load_vectorstore()
-        chunks = retrieve_context(vectorstore, ticker, query, year=year)
-        if not chunks:
+    # always use direct file reading — more reliable than FAISS ticker filter
+    if not year:
+        # default to most recent year if no year specified
+        from trend import get_filings_by_year
+        filings = get_filings_by_year(ticker)
+        if filings:
+            year = filings[-1]["year"]  # most recent
+        else:
             return {"error": f"No filing data found for {ticker}"}
-        retrieved_years = list(set([c.metadata.get("year") for c in chunks]))
-        print(f"   Retrieved chunks from years: {retrieved_years}")
-        context = "\n\n".join([c.page_content for c in chunks])
+
+    context = get_context_from_file(ticker, year)
+    if not context:
+        return {"error": f"No filing found for {ticker} {year}"}
 
     prompt = f"""<s>[INST] You are a senior financial analyst reviewing a specific SEC 10-K filing.
 
@@ -131,7 +131,7 @@ Return ONLY a JSON object with no extra text:
 - "rationale": one sentence referencing specific numbers or events from the filing
 - "red_flags": list of specific warning phrases found in the filing, empty list if none
 
-Filing year: {year if year else 'unknown'}
+Filing year: {year}
 Company: {ticker}
 
 Filing excerpt:
@@ -139,7 +139,7 @@ Filing excerpt:
 
 Respond with ONLY the JSON object. [/INST]"""
 
-    print(f"🤖 Calling Mistral for {ticker}...")
+    print(f"🤖 Calling LLM for {ticker}...")
     raw = call_mistral(prompt)
 
     try:

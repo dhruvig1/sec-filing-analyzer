@@ -9,4 +9,4 @@ data/
 embeddings/
 
 # mac
-.DS_Store
+.DS_Store.env
