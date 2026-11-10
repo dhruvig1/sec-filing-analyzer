@@ -1,41 +1,36 @@
 # src/app.py
+import os
+import sys
+
+import plotly.graph_objects as go
 import streamlit as st
-import plotly.graph_objects as go
-import sys, os
+
 sys.path.append(os.path.dirname(__file__))
+from config import SECTORS, TICKERS
+from llm import DEFAULT_MODELS
 from rag import generate_signal
-from trend import generate_trend, sentiment_to_score, risk_to_score
-import plotly.graph_objects as go
-import plotly.express as px
+from trend import generate_trend, risk_to_score, sentiment_to_score
 
 # Page Configuration
-st.set_page_config(
-    page_title="SEC Filing Analyzer",
-    #page_icon="🏦",
-    layout="wide"
-)
+st.set_page_config(page_title="SEC Filing Analyzer", layout="wide")
 
 st.title("SEC Filing Analyzer")
 st.caption("Extracts investment signals from 10-K filings using RAG + LLM")
 st.divider()
 
-TICKERS = [
-    "JPM", "BAC", "GS", "MS", "WFC", "C", "BLK", "AXP",
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-    "PGR", "TRV", "MET", "AIG", "PRU", "ALL",
-    "JNJ", "UNH", "PFE", "ABBV", "CVS",
-    "XOM", "CVX", "COP", "SLB",
-    "WMT", "HD", "NKE", "MCD", "SBUX"
-]
-
-SECTORS = {
-    "Finance & Banking": ["JPM", "BAC", "GS", "MS", "WFC", "C", "BLK", "AXP"],
-    "Tech":              ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"],
-    "Insurance":         ["PGR", "TRV", "MET", "AIG", "PRU", "ALL"],
-    "Healthcare":        ["JNJ", "UNH", "PFE", "ABBV", "CVS"],
-    "Energy":            ["XOM", "CVX", "COP", "SLB"],
-    "Consumer":          ["WMT", "HD", "NKE", "MCD", "SBUX"]
-}
+# Model backend (sidebar)
+with st.sidebar:
+    st.subheader("Model")
+    backend_label = st.radio(
+        "Inference backend",
+        ["Hosted: Llama-3.3-70B (Groq)", "Local: Ollama"],
+        index=0 if os.getenv("LLM_BACKEND", "groq") == "groq" else 1,
+    )
+    BACKEND = "groq" if backend_label.startswith("Hosted") else "ollama"
+    MODEL = st.text_input("Model name", value=os.getenv(f"{BACKEND.upper()}_MODEL", DEFAULT_MODELS[BACKEND]))
+    if BACKEND == "ollama":
+        st.caption("Runs on this machine; filing text never leaves it. Requires `ollama serve`.")
+LLM_KW = {"backend": BACKEND, "model": MODEL}
 
 
 # Tabs
@@ -63,7 +58,7 @@ with tab1:
 
         if run:
             with st.spinner(f"Analyzing {ticker} SEC filings..."):
-                signal = generate_signal(ticker, query)
+                signal = generate_signal(ticker, query, **LLM_KW)
 
             if "error" in signal and "raw_response" not in signal:
                 st.error(f" {signal['error']}")
@@ -127,7 +122,7 @@ with tab2:
 
         if run_trend:
             with st.spinner(f"Analyzing {trend_ticker} across all filing years..."):
-                trend_data = generate_trend(trend_ticker, trend_query)
+                trend_data = generate_trend(trend_ticker, trend_query, **LLM_KW)
 
             if not trend_data:
                 st.error("No trend data found.")
@@ -241,7 +236,7 @@ with tab3:
 
             for i, t in enumerate(selected_tickers):
                 with st.spinner(f"Analyzing {t}..."):
-                    sig = generate_signal(t, portfolio_query)
+                    sig = generate_signal(t, portfolio_query, **LLM_KW)
                     sig["ticker"] = t
                     all_signals.append(sig)
                 progress.progress(
@@ -301,22 +296,13 @@ with tab3:
             avg_risk   = round(sum(risk_scores) / len(risk_scores), 2)
 
             m1, m2, m3, m4 = st.columns(4)
-            #m1.metric("High Risk Companies",  len(high_risk),  
-            #          delta=", ".join(high_risk) if high_risk else "None")
-            #m2.metric("Bearish Companies",    len(bearish),    
-            #          delta=", ".join(bearish)   if bearish  else "None")
-            #m3.metric("Bullish Companies",    len(bullish),    
-            #          delta=", ".join(bullish)   if bullish  else "None")
-            #m4.metric("Avg Risk Score",       f"{avg_risk}/3")
-
-            m1, m2, m3, m4 = st.columns(4)
             m1.metric("High Risk",    len(high_risk),
                       delta=", ".join(high_risk) if high_risk else "None")
             m2.metric("Medium Risk",  len(medium_risk),
                       delta=", ".join(medium_risk[:3]) if medium_risk else "None")
             m3.metric("Low Risk",     len(low_risk),
                       delta=", ".join(low_risk) if low_risk else "None")
-            m4.metric("⚖️ Avg Risk Score", f"{avg_risk}/3")
+            m4.metric("Avg Risk Score", f"{avg_risk}/3")
 
             s1, s2, s3 = st.columns(3)
             s1.metric("Bullish", len(bullish),

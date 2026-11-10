@@ -3,10 +3,13 @@
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 
 # data (too large for GitHub)
 data/
 embeddings/
+results/
 
-# mac
-.DS_Store.env
+# editor / OS
+.DS_Store
+.ipynb_checkpoints/

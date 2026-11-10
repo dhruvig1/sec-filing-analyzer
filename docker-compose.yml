@@ -11,12 +11,16 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     GROQ_API_KEY: ${GROQ_API_KEY}
-    HF_TOKEN: ${HF_TOKEN}
+    LLM_BACKEND: ${LLM_BACKEND:-groq}
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+    OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
   volumes:
     - ./dags:/opt/airflow/dags
     - ./data:/opt/airflow/data
     - ./embeddings:/opt/airflow/embeddings
     - ./src:/opt/airflow/src
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   depends_on:
     postgres:
       condition: service_healthy
@@ -73,3 +77,8 @@ services:
       - ./embeddings:/app/embeddings
     env_file:
       - .env
+    environment:
+      # Reach an Ollama server running on the host machine
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
