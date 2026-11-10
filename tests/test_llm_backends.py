@@ -36,6 +36,9 @@ def test_ollama_request_and_usage(monkeypatch):
 
 
 def test_groq_cost_and_json_mode(monkeypatch):
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
+    monkeypatch.delenv("GROQ_PRICE_INPUT_PER_M", raising=False)
+    monkeypatch.delenv("GROQ_PRICE_OUTPUT_PER_M", raising=False)
     calls = {}
 
     class FakeCompletions:
@@ -47,8 +50,24 @@ def test_groq_cost_and_json_mode(monkeypatch):
     monkeypatch.setattr(llm, "_groq_client", SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions())))
     res = llm.complete([{"role": "user", "content": "hi"}], backend="groq")
     assert calls["response_format"] == {"type": "json_object"}
-    assert calls["model"] == "llama-3.3-70b-versatile"
-    assert res.cost_usd == pytest.approx(llm.PRICING["groq"]["input"] + llm.PRICING["groq"]["output"])
+    assert calls["model"] == "openai/gpt-oss-120b"
+    # reasoning model: bigger budget + explicit effort
+    assert calls["max_tokens"] >= llm.REASONING_MIN_TOKENS
+    assert calls["extra_body"]["reasoning_effort"] == "low"
+    assert res.cost_usd == pytest.approx(0.15 + 0.60)
+
+
+def test_non_reasoning_groq_model_keeps_budget(monkeypatch):
+    calls = {}
+
+    class FakeCompletions:
+        def create(self, **kw):
+            calls.update(kw)
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))], usage=None)
+
+    monkeypatch.setattr(llm, "_groq_client", SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions())))
+    llm.complete([{"role": "user", "content": "hi"}], backend="groq", model="some-other-model", max_tokens=600)
+    assert calls["max_tokens"] == 600 and "extra_body" not in calls
 
 
 def test_ollama_unreachable_gives_clear_error(monkeypatch):

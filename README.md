@@ -1,6 +1,6 @@
 # SEC Filing Analyzer 📊
 
-An LLM-powered RAG pipeline that extracts point-in-time risk signals from SEC 10-K filings, with a swappable inference layer that runs either **hosted Llama-3.3-70B (Groq)** or a **local quantized model (Ollama)**, plus retrieval and backtest evaluation.
+An LLM-powered RAG pipeline that extracts point-in-time risk signals from SEC 10-K filings, with a swappable inference layer that runs either a **hosted open-weight model on Groq (gpt-oss-120b)** or a **local quantized model (Ollama)**, plus retrieval and backtest evaluation.
 
 ---
 
@@ -26,7 +26,7 @@ The pipeline ingests 10-K filings from SEC EDGAR for 40 companies across 6 secto
 
 | Layer | Tools |
 |---|---|
-| LLM (hosted) | Llama-3.3-70B via Groq API |
+| LLM (hosted) | gpt-oss-120b via Groq API (originally Llama-3.3-70B, which Groq retired in Aug 2026) |
 | LLM (local) | Ollama: Llama-3.1-8B, Qwen2.5-7B, or any pulled model (4-bit quantized) |
 | Embeddings | `all-MiniLM-L6-v2` (sentence-transformers, runs locally) |
 | Vector store | FAISS |
@@ -85,7 +85,7 @@ Retrieval metrics are scored per company: retrieved chunks are collapsed to uniq
 
 ```bash
 ollama pull llama3.1:8b && ollama serve
-python src/compare_backends.py --backends groq ollama:llama3.1:8b
+python src/compare_backends.py --backends groq:openai/gpt-oss-120b ollama:llama3.1:8b
 python src/compare_backends.py --backends groq ollama:llama3.1:8b ollama:qwen2.5:7b --judge
 ```
 
@@ -115,6 +115,7 @@ Create a `.env` file:
 ```
 LLM_BACKEND=groq                 # or ollama
 GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=openai/gpt-oss-120b   # hosted model ID (check Groq's deprecations page)
 OLLAMA_MODEL=llama3.1:8b         # used when LLM_BACKEND=ollama
 CONTEXT_MODE=hybrid              # hybrid | retrieval | section
 AWS_ACCESS_KEY_ID=your_aws_key

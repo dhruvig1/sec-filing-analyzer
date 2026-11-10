@@ -1,10 +1,14 @@
 # src/llm.py
-"""Swappable inference layer: hosted Llama-3.3-70B on Groq, or a local quantized model via Ollama.
+"""Swappable inference layer: a hosted open-weight model on Groq, or a local quantized model via Ollama.
 
 Select the backend with environment variables (or pass backend=/model= explicitly):
 
-    LLM_BACKEND=groq      GROQ_MODEL=llama-3.3-70b-versatile    (needs GROQ_API_KEY)
-    LLM_BACKEND=ollama    OLLAMA_MODEL=llama3.1:8b               (needs `ollama serve`)
+    LLM_BACKEND=groq      GROQ_MODEL=openai/gpt-oss-120b    (needs GROQ_API_KEY)
+    LLM_BACKEND=ollama    OLLAMA_MODEL=llama3.1:8b          (needs `ollama serve`)
+
+Groq retires model IDs over time (llama-3.3-70b-versatile was shut down on
+2026-08-16; see https://console.groq.com/docs/deprecations), so the hosted model
+is a setting, not a hard-coded name.
 
 Ollama's default tags (e.g. llama3.1:8b, qwen2.5:7b) are 4-bit quantized (Q4_K_M),
 so an 8B model runs in roughly 5 GB of RAM on a laptop. Filing text never leaves
@@ -17,19 +21,36 @@ from dataclasses import dataclass
 import requests
 
 DEFAULT_MODELS = {
-    "groq": "llama-3.3-70b-versatile",
+    "groq": "openai/gpt-oss-120b",
     "ollama": "llama3.1:8b",
 }
 
-# USD per 1M tokens. Groq's published on-demand rate for llama-3.3-70b-versatile
-# (verify at https://groq.com/pricing). Local inference has no per-token charge.
-PRICING = {
-    "groq": {
-        "input": float(os.getenv("GROQ_PRICE_INPUT_PER_M", "0.59")),
-        "output": float(os.getenv("GROQ_PRICE_OUTPUT_PER_M", "0.79")),
-    },
-    "ollama": {"input": 0.0, "output": 0.0},
+# Groq on-demand prices, USD per 1M tokens (verify at https://groq.com/pricing).
+# Override with GROQ_PRICE_INPUT_PER_M / GROQ_PRICE_OUTPUT_PER_M for other models.
+# Local inference has no per-token charge.
+GROQ_PRICES = {
+    "openai/gpt-oss-120b": {"input": 0.15, "output": 0.60},
+    "openai/gpt-oss-20b": {"input": 0.075, "output": 0.30},
 }
+
+# Reasoning models spend output tokens "thinking" before answering, so they need
+# a larger completion budget and an explicit effort level.
+REASONING_PREFIXES = ("openai/gpt-oss", "gpt-oss")
+REASONING_MIN_TOKENS = 4000
+
+
+def is_reasoning_model(model: str) -> bool:
+    return model.startswith(REASONING_PREFIXES)
+
+
+def price_for(backend: str, model: str) -> dict:
+    if backend != "groq":
+        return {"input": 0.0, "output": 0.0}
+    base = GROQ_PRICES.get(model, {"input": 0.0, "output": 0.0})
+    return {
+        "input": float(os.getenv("GROQ_PRICE_INPUT_PER_M", base["input"])),
+        "output": float(os.getenv("GROQ_PRICE_OUTPUT_PER_M", base["output"])),
+    }
 
 
 @dataclass
@@ -43,7 +64,7 @@ class LLMResult:
 
     @property
     def cost_usd(self) -> float:
-        p = PRICING.get(self.backend, {"input": 0.0, "output": 0.0})
+        p = price_for(self.backend, self.model)
         return (self.input_tokens * p["input"] + self.output_tokens * p["output"]) / 1_000_000
 
 
@@ -69,6 +90,10 @@ def _groq_complete(messages, model, temperature, max_tokens, json_mode) -> LLMRe
     kwargs = dict(model=model, messages=messages, temperature=temperature, max_tokens=max_tokens)
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
+    if is_reasoning_model(model):
+        kwargs["max_tokens"] = max(max_tokens, REASONING_MIN_TOKENS)
+        # sent via extra_body so it also works on older groq SDK versions
+        kwargs["extra_body"] = {"reasoning_effort": os.getenv("GROQ_REASONING_EFFORT", "low")}
     start = time.perf_counter()
     resp = _groq_client.chat.completions.create(**kwargs)
     latency = time.perf_counter() - start
@@ -99,6 +124,8 @@ def _ollama_complete(messages, model, temperature, max_tokens, json_mode) -> LLM
     }
     if json_mode:
         payload["format"] = "json"
+    if is_reasoning_model(model):
+        payload["options"]["num_predict"] = max(max_tokens, REASONING_MIN_TOKENS)
     start = time.perf_counter()
     try:
         resp = requests.post(f"{host}/api/chat", json=payload,

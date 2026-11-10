@@ -23,7 +23,7 @@ with st.sidebar:
     st.subheader("Model")
     backend_label = st.radio(
         "Inference backend",
-        ["Hosted: Llama-3.3-70B (Groq)", "Local: Ollama"],
+        ["Hosted: Groq", "Local: Ollama"],
         index=0 if os.getenv("LLM_BACKEND", "groq") == "groq" else 1,
     )
     BACKEND = "groq" if backend_label.startswith("Hosted") else "ollama"

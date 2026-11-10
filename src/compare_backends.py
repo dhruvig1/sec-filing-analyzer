@@ -1,5 +1,5 @@
 # src/compare_backends.py
-"""Compare a local quantized model (Ollama) against hosted Llama-3.3-70B (Groq) on the same filings.
+"""Compare a local quantized model (Ollama) against a hosted model (Groq, default gpt-oss-120b) on the same filings.
 
 Each backend gets the identical prompt and context for every (ticker, year), so
 differences come from the model alone. For each output we record:
@@ -19,7 +19,7 @@ and, across backends, how often they agree on risk_level and sentiment.
 
 Usage (start Ollama first: `ollama serve` and `ollama pull llama3.1:8b`):
 
-    python src/compare_backends.py --backends groq:llama-3.3-70b-versatile ollama:llama3.1:8b
+    python src/compare_backends.py --backends groq:openai/gpt-oss-120b ollama:llama3.1:8b
     python src/compare_backends.py --backends groq ollama:qwen2.5:7b --max-cases 10 --judge
 """
 import argparse
@@ -219,7 +219,7 @@ def main():
     p.add_argument("--query", default=DEFAULT_QUERY)
     p.add_argument("--ground-threshold", type=float, default=0.5)
     p.add_argument("--judge", action="store_true",
-                   help="add an LLM-as-judge faithfulness score (default judge: groq 70B; "
+                   help="add an LLM-as-judge faithfulness score (default judge: the Groq model; "
                         "note it may favour its own outputs)")
     p.add_argument("--judge-backend", default="groq")
     args = p.parse_args()
