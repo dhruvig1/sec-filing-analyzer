@@ -1,0 +1,26 @@
+{
+  "groq:openai/gpt-oss-120b": {
+    "n": 10,
+    "json_valid_pct": 100,
+    "schema_valid_pct": 100,
+    "grounding": 0.805,
+    "grounded_frac": 1.0,
+    "redflag_verbatim": 0.95,
+    "judge_faithful": 4.8,
+    "median_latency_s": 1.25,
+    "total_cost_usd": 0.00362
+  },
+  "ollama:qwen3:8b": {
+    "n": 10,
+    "json_valid_pct": 100,
+    "schema_valid_pct": 100,
+    "grounding": 0.925,
+    "grounded_frac": 1.0,
+    "redflag_verbatim": 0.933,
+    "judge_faithful": 4.8,
+    "median_latency_s": 62.22,
+    "total_cost_usd": 0,
+    "risk_agreement_vs_ref": 90.0,
+    "sentiment_agreement_vs_ref": 0
+  }
+}
