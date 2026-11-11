@@ -98,8 +98,12 @@ def redflag_verbatim_rate(flags, context):
 
 def judge(context, signal, backend, model):
     output = json.dumps({k: signal.get(k) for k in ("key_risks", "rationale", "red_flags")}, indent=2)
-    res = complete([{"role": "user", "content": JUDGE_PROMPT.format(context=context, output=output)}],
-                   backend=backend, model=model, temperature=0.0, max_tokens=300)
+    try:
+        res = complete([{"role": "user", "content": JUDGE_PROMPT.format(context=context, output=output)}],
+                       backend=backend, model=model, temperature=0.0, max_tokens=300)
+    except Exception as e:  # rate limits etc.: record no score instead of losing the whole run
+        print(f"   judge call failed ({str(e)[:80]}); no score for this case")
+        return None
     try:
         return int(json.loads(res.text[res.text.index("{"): res.text.rindex("}") + 1])["score"])
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
@@ -203,9 +207,10 @@ def to_markdown(summary):
 
 def local_embedder():
     from langchain_huggingface import HuggingFaceEmbeddings
-    from config import EMBEDDING_MODEL
+    from config import GROUNDING_EMBEDDING_MODEL
 
-    emb = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    # fixed model, so grounding scores stay comparable when the retrieval embedder changes
+    emb = HuggingFaceEmbeddings(model_name=GROUNDING_EMBEDDING_MODEL)
     return emb.embed_documents
 
 

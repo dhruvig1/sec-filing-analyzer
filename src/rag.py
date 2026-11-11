@@ -4,10 +4,14 @@
 Context for the LLM is built in one of three modes (CONTEXT_MODE env var or the
 context_mode argument):
 
-    hybrid    (default) Item 1A excerpt + query-specific chunks retrieved from FAISS
-    retrieval only the FAISS chunks for the user's query
+    hybrid    (default) Item 1A excerpt + query-specific retrieved chunks
+    retrieval only the retrieved chunks for the user's query
     section   only the Item 1A excerpt (the original behaviour; use it to reproduce
               earlier backtest numbers)
+
+How chunks are retrieved is a separate setting (RETRIEVER, see retrieval.py):
+dense (FAISS), bm25, or hybrid (default: dense + BM25 fused). Don't confuse the
+"hybrid" context mode above with hybrid retrieval.
 
 Retrieval is filtered to the exact ticker AND filing year. There is deliberately
 no fallback to other years: borrowing a later filing's text would leak future
@@ -20,7 +24,7 @@ from functools import lru_cache
 from dotenv import load_dotenv
 
 from config import EMBEDDING_MODEL, FILINGS_DIR, INDEX_DIR
-from llm import complete
+from llm import LLMResult, complete
 from text_utils import clean_filing_text, extract_risk_section
 
 load_dotenv()
@@ -28,9 +32,27 @@ load_dotenv()
 DEFAULT_QUERY = "What are the major risk factors and investment outlook?"
 SECTION_CHARS = {"section": 4000, "hybrid": 2500}
 RETRIEVED_CHARS = 3000
+MAX_ATTEMPTS = 2  # first try + one repair retry (app / backtest path)
 
 RISK_LEVELS = {"LOW", "MEDIUM", "HIGH"}
 SENTIMENTS = {"BULLISH", "NEUTRAL", "BEARISH"}
+
+# JSON Schema for the signal. Backends that support structured outputs (Ollama) are
+# constrained to it while decoding, so small local models can't return e.g. key_risks
+# as objects instead of strings. validate_signal() still checks every backend's output.
+SIGNAL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ticker": {"type": "string"},
+        "risk_level": {"type": "string", "enum": sorted(RISK_LEVELS)},
+        "sentiment": {"type": "string", "enum": sorted(SENTIMENTS)},
+        "key_risks": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+        "rationale": {"type": "string"},
+        "red_flags": {"type": "array", "items": {"type": "string"}},
+        "answerable": {"type": "boolean"},
+    },
+    "required": ["ticker", "answerable", "risk_level", "sentiment", "key_risks", "rationale", "red_flags"],
+}
 
 SYSTEM_PROMPT = (
     "You are a senior financial analyst reviewing a specific SEC 10-K filing. "
@@ -45,9 +67,10 @@ Return a JSON object with exactly these keys:
 - "ticker": string
 - "risk_level": one of "LOW", "MEDIUM", "HIGH"
 - "sentiment": one of "BULLISH", "NEUTRAL", "BEARISH"
-- "key_risks": list of 3 SPECIFIC risks with details from the filing
+- "answerable": true if the excerpt addresses the analyst question, false if it does not (for example, the question is about a different company or a topic the filing doesn't cover)
+- "key_risks": list of 3 SPECIFIC, distinct risks with details from the filing. Focus them on the analyst question when answerable; otherwise give the 3 most important risks in the excerpt. Never repeat a risk.
 - "rationale": one sentence referencing specific numbers or events from the filing
-- "red_flags": list of warning phrases copied verbatim from the filing, empty list if none
+- "red_flags": list of short warning phrases copied verbatim from the filing that are NOT already stated in key_risks (e.g. going-concern doubts, material weaknesses, restatements, covenant breaches, regulatory orders); empty list if none
 
 Filing year: {year}
 Company: {ticker}
@@ -60,24 +83,25 @@ Filing excerpt:
 @lru_cache(maxsize=1)
 def load_vectorstore():
     from langchain_community.vectorstores import FAISS
-    from langchain_huggingface import HuggingFaceEmbeddings
 
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    from embeddings import get_embeddings
+
+    if not INDEX_DIR.exists():
+        raise FileNotFoundError(
+            f"No index for EMBEDDING_MODEL={EMBEDDING_MODEL} at {INDEX_DIR}. "
+            f"Build it with: python src/ingest.py --skip-download")
     # The index is built locally by ingest.py, so deserializing it is safe.
-    return FAISS.load_local(str(INDEX_DIR), embeddings, allow_dangerous_deserialization=True)
+    return FAISS.load_local(str(INDEX_DIR), get_embeddings(EMBEDDING_MODEL), allow_dangerous_deserialization=True)
 
 
-def retrieve_context(vectorstore, ticker, query, year=None, k=5):
+def retrieve_context(vectorstore, ticker, query, year=None, k=5, method=None):
     """Top-k chunks for `query` from exactly this ticker (and filing year, if given).
 
-    Uses an exact metadata filter. The previous substring match meant "C"
-    (Citigroup) also matched COP, CVX, CVS, MCD... and "MS" matched MSFT.
+    method: dense | bm25 | hybrid (default: RETRIEVER setting, hybrid). See retrieval.py.
     """
-    flt = {"source": ticker.upper()}
-    if year is not None:
-        flt["year"] = int(year)
-    fetch_k = max(k * 20, getattr(getattr(vectorstore, "index", None), "ntotal", 0))
-    return vectorstore.similarity_search(query, k=k, filter=flt, fetch_k=fetch_k)
+    from retrieval import retrieve
+
+    return retrieve(vectorstore, ticker, query, year=year, k=k, method=method)
 
 
 # ── RAW FILINGS ─────────────────────────────────────────────────
@@ -142,7 +166,8 @@ def build_context(ticker, year, query, context_mode=None, k=5, vectorstore=None)
                 break
             parts.append(f"[Retrieved: {d.metadata.get('section', 'filing')}]\n{chunk}")
             sources.append({"type": "retrieved_chunk", "year": d.metadata.get("year"),
-                            "section": d.metadata.get("section")})
+                            "section": d.metadata.get("section"),
+                            "chunk_id": d.metadata.get("chunk_id")})
             used += len(chunk)
 
     return "\n\n".join(parts), sources
@@ -173,6 +198,8 @@ def validate_signal(sig):
         errors.append("rationale missing")
     if not isinstance(sig.get("red_flags"), list):
         errors.append("red_flags must be a list")
+    if "answerable" in sig and not isinstance(sig["answerable"], bool):
+        errors.append("answerable must be true or false")
     return errors
 
 
@@ -185,20 +212,60 @@ def build_messages(ticker, year, query, context):
     ]
 
 
-def run_llm(ticker, year, query, context, backend=None, model=None):
-    """Call the LLM on a prepared context. Returns (signal_dict, LLMResult)."""
-    result = complete(build_messages(ticker, year, query, context), backend=backend, model=model)
-    signal = parse_signal(result.text)
+def normalize_signal(sig):
+    """Fix harmless formatting slips ("high", " Bearish") so they don't fail validation."""
+    if isinstance(sig, dict):
+        for key in ("risk_level", "sentiment"):
+            if isinstance(sig.get(key), str):
+                sig[key] = sig[key].strip().upper()
+    return sig
+
+
+def run_llm(ticker, year, query, context, backend=None, model=None, max_attempts=1):
+    """Call the LLM on a prepared context. Returns (signal_dict, LLMResult).
+
+    With max_attempts > 1, an unparseable or schema-invalid answer is sent back to
+    the model with the specific errors and it gets another try. The default is a
+    single attempt so compare_backends.py measures each model's first-try validity;
+    generate_signal() (the app path) passes MAX_ATTEMPTS.
+
+    The returned LLMResult sums latency and tokens over all attempts, so cost
+    numbers include retries.
+    """
+    messages = build_messages(ticker, year, query, context)
+    results, signal, errors = [], None, []
+    for _ in range(max_attempts):
+        result = complete(messages, backend=backend, model=model, json_mode=SIGNAL_SCHEMA)
+        results.append(result)
+        signal = normalize_signal(parse_signal(result.text))
+        errors = ["could not parse JSON"] if signal is None else validate_signal(signal)
+        if not errors:
+            break
+        messages = messages + [
+            {"role": "assistant", "content": result.text},
+            {"role": "user", "content": "Your response was invalid: " + "; ".join(errors)
+                + ". Return only the corrected JSON object with exactly the required keys."},
+        ]
+
+    last = results[-1]
+    total = LLMResult(
+        text=last.text, backend=last.backend, model=last.model,
+        latency_s=sum(r.latency_s for r in results),
+        input_tokens=sum(r.input_tokens for r in results),
+        output_tokens=sum(r.output_tokens for r in results),
+    )
     if signal is None:
-        signal = {"ticker": ticker, "raw_response": result.text, "error": "Could not parse JSON"}
+        signal = {"ticker": ticker, "raw_response": last.text, "error": "Could not parse JSON"}
     signal["_meta"] = {
-        "backend": result.backend,
-        "model": result.model,
-        "latency_s": round(result.latency_s, 2),
-        "input_tokens": result.input_tokens,
-        "output_tokens": result.output_tokens,
+        "backend": total.backend,
+        "model": total.model,
+        "latency_s": round(total.latency_s, 2),
+        "input_tokens": total.input_tokens,
+        "output_tokens": total.output_tokens,
+        "attempts": len(results),
+        "schema_errors": errors,
     }
-    return signal, result
+    return signal, total
 
 
 def generate_signal(ticker, query=DEFAULT_QUERY, year=None, backend=None, model=None, context_mode=None):
@@ -216,7 +283,12 @@ def generate_signal(ticker, query=DEFAULT_QUERY, year=None, backend=None, model=
         return {"error": f"No filing found for {ticker} {year}"}
 
     print(f"Calling LLM for {ticker}...")
-    signal, _ = run_llm(ticker, year, query, context, backend=backend, model=model)
+    signal, _ = run_llm(ticker, year, query, context, backend=backend, model=model,
+                        max_attempts=MAX_ATTEMPTS)
+    if signal["_meta"]["schema_errors"] and "error" not in signal:
+        # Don't let a half-valid signal (e.g. risk_level="SEVERE") reach the app or the backtest.
+        signal["error"] = "LLM output failed schema validation: " + "; ".join(signal["_meta"]["schema_errors"])
+    signal["year"] = year
     signal["_meta"]["context_mode"] = (context_mode or os.getenv("CONTEXT_MODE", "hybrid")).lower()
     signal["_meta"]["sources"] = sources
     return signal

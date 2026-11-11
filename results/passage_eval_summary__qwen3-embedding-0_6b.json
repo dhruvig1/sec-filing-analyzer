@@ -1,0 +1,74 @@
+{
+  "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
+  "retrievers": {
+    "dense": {
+      "n_questions": 30,
+      "p_at_k": 0.84,
+      "p_at_k_ci95": [
+        0.76,
+        0.913
+      ],
+      "strict_p_at_k": 0.447,
+      "strict_p_at_k_ci95": [
+        0.353,
+        0.547
+      ],
+      "mrr": 0.756,
+      "mrr_ci95": [
+        0.617,
+        0.883
+      ],
+      "ndcg_at_k": 0.827,
+      "ndcg_at_k_ci95": [
+        0.765,
+        0.881
+      ]
+    },
+    "bm25": {
+      "n_questions": 30,
+      "p_at_k": 0.813,
+      "p_at_k_ci95": [
+        0.733,
+        0.887
+      ],
+      "strict_p_at_k": 0.373,
+      "strict_p_at_k_ci95": [
+        0.28,
+        0.473
+      ],
+      "mrr": 0.625,
+      "mrr_ci95": [
+        0.483,
+        0.767
+      ],
+      "ndcg_at_k": 0.76,
+      "ndcg_at_k_ci95": [
+        0.688,
+        0.835
+      ]
+    },
+    "hybrid": {
+      "n_questions": 30,
+      "p_at_k": 0.88,
+      "p_at_k_ci95": [
+        0.82,
+        0.933
+      ],
+      "strict_p_at_k": 0.447,
+      "strict_p_at_k_ci95": [
+        0.353,
+        0.54
+      ],
+      "mrr": 0.706,
+      "mrr_ci95": [
+        0.564,
+        0.839
+      ],
+      "ndcg_at_k": 0.847,
+      "ndcg_at_k_ci95": [
+        0.794,
+        0.894
+      ]
+    }
+  }
+}

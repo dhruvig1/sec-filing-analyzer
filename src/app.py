@@ -1,39 +1,97 @@
 # src/app.py
 import os
+import re
 import sys
 
 import plotly.graph_objects as go
+import requests
 import streamlit as st
 
 sys.path.append(os.path.dirname(__file__))
 from config import SECTORS, TICKERS
 from llm import DEFAULT_MODELS
-from rag import generate_signal
-from trend import generate_trend, risk_to_score, sentiment_to_score
+from rag import DEFAULT_QUERY, generate_signal
+from trend import get_filings_by_year, risk_to_score
+
+RISK_COLORS = {"LOW": "green", "MEDIUM": "orange", "HIGH": "red"}
+SENTIMENT_NOTE = ("Sentiment is still in the raw JSON but not shown: in testing it barely varied "
+                  "with the filing (each model gave nearly the same label every time).")
 
 # Page Configuration
 st.set_page_config(page_title="SEC Filing Analyzer", layout="wide")
-
 st.title("SEC Filing Analyzer")
-st.caption("Extracts investment signals from 10-K filings using RAG + LLM")
+st.caption("Risk signals from SEC 10-K filings: hybrid retrieval (BM25 + embeddings) + LLM, with sources")
 st.divider()
 
-# Model backend (sidebar)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def ollama_available():
+    host = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+    try:
+        return requests.get(host, timeout=0.5).ok
+    except requests.RequestException:
+        return False
+
+
+@st.cache_data(show_spinner=False, max_entries=500)
+def _cached_signal(ticker, query, year, backend, model):
+    return generate_signal(ticker, query, year=year, backend=backend, model=model)
+
+
+def cached_signal(ticker, query, year, backend, model):
+    """Same inputs give the same signal, so repeated clicks are instant and free.
+    Errors (rate limits, Ollama not running) are not kept, so a retry can succeed."""
+    sig = _cached_signal(ticker, query, year, backend, model)
+    if "error" in sig:
+        _cached_signal.clear()
+    return sig
+
+
+def norm(text):
+    return re.sub(r"\W+", " ", str(text).lower()).strip()
+
+
+def distinct_red_flags(sig):
+    """Hide red flags that just restate a key risk."""
+    risks = [norm(r) for r in sig.get("key_risks", [])]
+    return [f for f in sig.get("red_flags", []) if norm(f) and not any(norm(f) in r or r in norm(f) for r in risks)]
+
+
+def show_sources(sig):
+    sources = [s for s in sig.get("_meta", {}).get("sources", []) if s.get("type") == "retrieved_chunk"]
+    excerpt = any(s.get("type") == "item_1a_excerpt" for s in sig.get("_meta", {}).get("sources", []))
+    with st.expander(f"Sources ({len(sources)} retrieved passages{' + Item 1A excerpt' if excerpt else ''})"):
+        for s in sources:
+            st.write(f"`{s.get('chunk_id') or 'chunk'}` · {s.get('section', '').title()} · filed {s.get('year')}")
+        meta = sig.get("_meta", {})
+        if meta.get("latency_s") is not None:
+            st.caption(f"{meta.get('backend')}:{meta.get('model')} · {meta.get('latency_s')}s · "
+                       f"{meta.get('input_tokens', 0)} in / {meta.get('output_tokens', 0)} out tokens")
+
+
+def show_not_answerable(sig):
+    if sig.get("answerable") is False:
+        st.warning("The retrieved filing passages don't address this question. "
+                   "Showing the most important risks they do contain instead.")
+
+
+# ── Sidebar: model backend ──────────────────────────────────────
 with st.sidebar:
     st.subheader("Model")
-    backend_label = st.radio(
-        "Inference backend",
-        ["Hosted: Groq", "Local: Ollama"],
-        index=0 if os.getenv("LLM_BACKEND", "groq") == "groq" else 1,
-    )
+    local_ok = ollama_available()
+    options = ["Hosted: Groq"] + (["Local: Ollama"] if local_ok else [])
+    default_local = os.getenv("LLM_BACKEND", "groq") == "ollama" and local_ok
+    backend_label = st.radio("Inference backend", options, index=1 if default_local else 0)
     BACKEND = "groq" if backend_label.startswith("Hosted") else "ollama"
     MODEL = st.text_input("Model name", value=os.getenv(f"{BACKEND.upper()}_MODEL", DEFAULT_MODELS[BACKEND]))
     if BACKEND == "ollama":
-        st.caption("Runs on this machine; filing text never leaves it. Requires `ollama serve`.")
-LLM_KW = {"backend": BACKEND, "model": MODEL}
+        st.caption("Runs on this machine; filing text never leaves it. Slower: about a minute per signal.")
+    elif not os.getenv("GROQ_API_KEY"):
+        st.error("GROQ_API_KEY is not set.")
+    if not local_ok:
+        st.caption("Local models appear here when Ollama is running (`ollama serve`).")
+LLM = {"backend": BACKEND, "model": MODEL}
 
-
-# Tabs
 tab1, tab2, tab3 = st.tabs(["Signal Generator", "YoY Trend", "Portfolio Dashboard"])
 
 # ════════════════════════════════════════════════════════════════
@@ -45,34 +103,27 @@ with tab1:
     with col_side:
         st.subheader("Configuration")
         ticker = st.selectbox("Select Company", TICKERS, key="tab1_ticker")
-        query  = st.text_area("Analysis Query",
-                    value="What are the major risk factors and investment outlook?",
-                    height=100, key="tab1_query")
-        run    = st.button("Generate Signal", type="primary",
-                    use_container_width=True, key="tab1_run")
-        st.caption("Data sourced from SEC EDGAR 10-K filings (last 3 years)")
+        query = st.text_area("Analysis Query", value=DEFAULT_QUERY, height=100, key="tab1_query")
+        run = st.button("Generate Signal", type="primary", use_container_width=True, key="tab1_run")
+        st.caption("Data: SEC EDGAR 10-K filings (last 3 years). Uses the most recent filing.")
 
     with col_main:
         if not run:
             st.info("Select a company and click **Generate Signal** to begin.")
+        else:
+            with st.spinner(f"Analyzing {ticker}'s 10-K..."):
+                signal = cached_signal(ticker, query, None, **LLM)
 
-        if run:
-            with st.spinner(f"Analyzing {ticker} SEC filings..."):
-                signal = generate_signal(ticker, query, **LLM_KW)
-
-            if "error" in signal and "raw_response" not in signal:
-                st.error(f" {signal['error']}")
+            if "error" in signal:
+                st.error(signal["error"])
             else:
-                risk      = signal.get("risk_level", "N/A")
-                sent      = signal.get("sentiment", "N/A")
-                n_risks   = len(signal.get("key_risks", []))
-                risk_color = {"LOW": "green", "MEDIUM": "orange", "HIGH": "red"}.get(risk, "gray")
-                sent_color = {"BULLISH": "green", "NEUTRAL": "gray", "BEARISH": "red"}.get(sent, "gray")
-
+                risk = signal.get("risk_level", "N/A")
+                n_sources = sum(s.get("type") == "retrieved_chunk" for s in signal.get("_meta", {}).get("sources", []))
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Risk Level", risk)
-                m2.metric("Sentiment",  sent)
-                m3.metric("Key Risks",  n_risks)
+                m2.metric("Filing Year", signal.get("year", "N/A"))
+                m3.metric("Passages Retrieved", n_sources)
+                show_not_answerable(signal)
                 st.divider()
 
                 left, right = st.columns(2)
@@ -82,252 +133,136 @@ with tab1:
                         st.warning(f"**{i}.** {r}")
                     st.subheader("Analyst Rationale")
                     st.info(signal.get("rationale", "N/A"))
-
                 with right:
                     st.subheader("Red Flags")
-                    flags = signal.get("red_flags", [])
+                    flags = distinct_red_flags(signal)
                     if flags:
                         for f in flags:
-                            st.error(f" {f}")
+                            st.error(f)
                     else:
-                        st.success("No major red flags detected")
-                    st.subheader("Raw Signal JSON")
-                    st.json(signal)
-
-                st.divider()
-                st.markdown(
-                    f"### Overall Signal: :{sent_color}[**{sent}**] | "
-                    f"Risk: :{risk_color}[**{risk}**]"
-                )
+                        st.success("No additional red flags beyond the key risks")
+                    show_sources(signal)
+                    with st.expander("Raw signal JSON"):
+                        st.json(signal)
+                st.caption(SENTIMENT_NOTE)
 
 # ════════════════════════════════════════════════════════════════
 # TAB 2: YoY TREND
 # ════════════════════════════════════════════════════════════════
 with tab2:
-    st.subheader("Year-over-Year Risk & Sentiment Trend")
-
+    st.subheader("Year-over-Year Risk Trend")
     t2_col1, t2_col2 = st.columns([1, 3])
 
     with t2_col1:
         trend_ticker = st.selectbox("Select Company", TICKERS, key="tab2_ticker")
-        trend_query  = st.text_area("Analysis Query",
-                        value="What are the major risk factors and investment outlook?",
-                        height=100, key="tab2_query")
-        run_trend    = st.button("Generate Trend", type="primary",
-                        use_container_width=True, key="tab2_run")
+        trend_query = st.text_area("Analysis Query", value=DEFAULT_QUERY, height=100, key="tab2_query")
+        run_trend = st.button("Generate Trend", type="primary", use_container_width=True, key="tab2_run")
 
     with t2_col2:
         if not run_trend:
-            st.info("Select a company and click **Generate Trend** to see YoY analysis.")
+            st.info("Select a company and click **Generate Trend** to compare its filings year by year.")
+        else:
+            years = [f["year"] for f in get_filings_by_year(trend_ticker)]
+            trend_data = []
+            with st.spinner(f"Analyzing {trend_ticker} across {len(years)} filings..."):
+                for y in years:
+                    trend_data.append(cached_signal(trend_ticker, trend_query, y, **LLM))
+            ok = [t for t in trend_data if "error" not in t]
 
-        if run_trend:
-            with st.spinner(f"Analyzing {trend_ticker} across all filing years..."):
-                trend_data = generate_trend(trend_ticker, trend_query, **LLM_KW)
-
-            if not trend_data:
-                st.error("No trend data found.")
+            if not ok:
+                st.error("No trend data found." + (f" ({trend_data[0]['error']})" if trend_data else ""))
             else:
-                years      = [t["year"] for t in trend_data]
-                sentiments = [sentiment_to_score(t.get("sentiment", "NEUTRAL")) for t in trend_data]
-                risks      = [risk_to_score(t.get("risk_level", "MEDIUM")) for t in trend_data]
-                sent_labels = [t.get("sentiment", "N/A") for t in trend_data]
-                risk_labels = [t.get("risk_level", "N/A") for t in trend_data]
-
-                # CHART
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=years, y=sentiments,
-                    mode="lines+markers+text",
-                    name="Sentiment",
-                    text=sent_labels,
-                    textposition="top center",
-                    line=dict(color="#00CC96", width=3),
-                    marker=dict(size=12)
-                ))
-                fig.add_trace(go.Scatter(
-                    x=years, y=risks,
-                    mode="lines+markers+text",
-                    name="Risk Level",
-                    text=risk_labels,
-                    textposition="bottom center",
-                    line=dict(color="#EF553B", width=3),
-                    marker=dict(size=12),
-                    yaxis="y2"
-                ))
+                fig = go.Figure(go.Scatter(
+                    x=[t["year"] for t in ok], y=[risk_to_score(t.get("risk_level")) for t in ok],
+                    mode="lines+markers+text", text=[t.get("risk_level") for t in ok], textposition="top center",
+                    line=dict(color="#EF553B", width=3), marker=dict(size=12), name="Risk level"))
                 fig.update_layout(
-                    title=f"{trend_ticker} — Risk & Sentiment Trend",
-                    xaxis=dict(title="Filing Year", tickvals=years),
-                    yaxis=dict(
-                        title="Sentiment",
-                        tickvals=[-1, 0, 1],
-                        ticktext=["BEARISH", "NEUTRAL", "BULLISH"]
-                    ),
-                    yaxis2=dict(
-                        title="Risk Level",
-                        tickvals=[1, 2, 3],
-                        ticktext=["LOW", "MEDIUM", "HIGH"],
-                        overlaying="y",
-                        side="right"
-                    ),
-                    legend=dict(x=0.01, y=0.99),
-                    height=420,
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="white")
-                )
+                    title=f"{trend_ticker}: risk level by filing year",
+                    xaxis=dict(title="Filing year", tickvals=[t["year"] for t in ok]),
+                    yaxis=dict(title="Risk level", tickvals=[1, 2, 3], ticktext=["LOW", "MEDIUM", "HIGH"],
+                               range=[0.5, 3.5]),
+                    height=380, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="white"))
                 st.plotly_chart(fig, use_container_width=True)
 
-                # YoY RISK TABLE 
                 st.subheader("Key Risks by Year")
                 for t in trend_data:
-                    with st.expander(f"**{t['year']}** — {t.get('sentiment')} | {t.get('risk_level')}"):
+                    if "error" in t:
+                        st.error(f"{t.get('year', '')}: {t['error']}")
+                        continue
+                    with st.expander(f"**{t['year']}**: {t.get('risk_level')} risk"):
+                        show_not_answerable(t)
                         for i, r in enumerate(t.get("key_risks", []), 1):
                             st.write(f"{i}. {r}")
                         st.caption(f"Rationale: {t.get('rationale', 'N/A')}")
+                        show_sources(t)
 
 # ════════════════════════════════════════════════════════════════
 # TAB 3: PORTFOLIO DASHBOARD
 # ════════════════════════════════════════════════════════════════
 with tab3:
     st.subheader("Portfolio-Level Risk Dashboard")
-    st.caption("Analyze risk across your entire portfolio at once")
-
+    st.caption("Analyze risk across several companies at once")
     col_left, col_right = st.columns([1, 3])
 
     with col_left:
-        sector_filter = st.selectbox(
-            "Filter by Sector",
-            ["All Sectors"] + list(SECTORS.keys()),
-            key="tab3_sector"
-        )
-        
-        # filter tickers by sector
-        if sector_filter == "All Sectors":
-            available_tickers = TICKERS
-        else:
-            available_tickers = SECTORS[sector_filter]
-        
-        selected_tickers = st.multiselect(
-            "Select Portfolio Companies",
-            available_tickers,
-            default=available_tickers[:3],
-            key="tab3_tickers"
-        )
-        portfolio_query = st.text_area(
-            "Analysis Query",
-            value="What are the major risk factors and investment outlook?",
-            height=100,
-            key="tab3_query"
-        )
-        run_portfolio = st.button(
-            "Analyze Portfolio",
-            type="primary",
-            use_container_width=True,
-            key="tab3_run"
-        )
+        sector_filter = st.selectbox("Filter by Sector", ["All Sectors"] + list(SECTORS), key="tab3_sector")
+        available = TICKERS if sector_filter == "All Sectors" else SECTORS[sector_filter]
+        selected = st.multiselect("Select Portfolio Companies", available, default=available[:3],
+                                  max_selections=8, key="tab3_tickers")
+        portfolio_query = st.text_area("Analysis Query", value=DEFAULT_QUERY, height=100, key="tab3_query")
+        run_portfolio = st.button("Analyze Portfolio", type="primary", use_container_width=True, key="tab3_run")
 
     with col_right:
         if not run_portfolio:
             st.info("Select companies and click **Analyze Portfolio**.")
-
-        if run_portfolio and selected_tickers:
-            all_signals = []
-            progress    = st.progress(0, text="Analyzing portfolio...")
-
-            for i, t in enumerate(selected_tickers):
-                with st.spinner(f"Analyzing {t}..."):
-                    sig = generate_signal(t, portfolio_query, **LLM_KW)
-                    sig["ticker"] = t
-                    all_signals.append(sig)
-                progress.progress(
-                    (i + 1) / len(selected_tickers),
-                    text=f"Analyzed {i+1}/{len(selected_tickers)} companies"
-                )
-
+        elif selected:
+            signals = {}
+            progress = st.progress(0, text="Analyzing portfolio...")
+            for i, t in enumerate(selected):
+                signals[t] = cached_signal(t, portfolio_query, None, **LLM)
+                progress.progress((i + 1) / len(selected), text=f"Analyzed {i + 1}/{len(selected)} companies")
             progress.empty()
 
-            # HEATMAP
-            risk_map  = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
-            sent_map  = {"BEARISH": -1, "NEUTRAL": 0, "BULLISH": 1}
+            ok = {t: s for t, s in signals.items() if "error" not in s}
+            failed = {t: s["error"] for t, s in signals.items() if "error" in s}
+            if failed:
+                st.error("Could not analyze: " + "; ".join(f"{t} ({e})" for t, e in failed.items()))
 
-            tickers_list  = [s["ticker"] for s in all_signals]
-            risk_scores   = [risk_map.get(s.get("risk_level", "MEDIUM"), 2) for s in all_signals]
-            sent_scores   = [sent_map.get(s.get("sentiment", "NEUTRAL"), 0) for s in all_signals]
-            risk_labels   = [s.get("risk_level", "N/A") for s in all_signals]
-            sent_labels   = [s.get("sentiment",  "N/A") for s in all_signals]
+            if ok:
+                tickers = list(ok)
+                levels = [ok[t].get("risk_level", "N/A") for t in tickers]
+                fig = go.Figure(go.Heatmap(
+                    z=[[risk_to_score(l) for l in levels]], x=tickers, y=["Risk level"],
+                    text=[levels], texttemplate="%{text}", textfont={"size": 14, "color": "white"},
+                    zmin=1, zmax=3, showscale=False,
+                    colorscale=[[0.0, "#1a7f37"], [0.5, "#e67e22"], [1.0, "#c0392b"]]))  # LOW green -> HIGH red
+                fig.update_layout(title="Portfolio Risk Heatmap", height=200, xaxis=dict(title="Company"),
+                                  plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                  font=dict(color="white"), margin=dict(t=40, b=40))
+                st.plotly_chart(fig, use_container_width=True)
 
-            # heatmap matrix: rows = metrics, cols = tickers
-            fig_heat = go.Figure(data=go.Heatmap(
-                z=[risk_scores, sent_scores],
-                x=tickers_list,
-                y=["Risk Level", "Sentiment"],
-                text=[[risk_labels[i] for i in range(len(tickers_list))],
-                      [sent_labels[i] for i in range(len(tickers_list))]],
-                texttemplate="%{text}",
-                textfont={"size": 14, "color": "white"},
-                colorscale=[
-                    [0.0, "#1a472a"],   # dark green (low risk / bullish)
-                    [0.5, "#e67e22"],   # orange (medium)
-                    [1.0, "#c0392b"],   # red (high risk / bearish)
-                ],
-                showscale=False
-            ))
-            fig_heat.update_layout(
-                title="Portfolio Risk Heatmap",
-                height=280,
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="white"),
-                xaxis=dict(title="Company"),
-                yaxis=dict(title="")
-            )
-            st.plotly_chart(fig_heat, use_container_width=True)
+                st.divider()
+                st.subheader("Portfolio Summary")
+                cols = st.columns(4)
+                for col, level in zip(cols, ["HIGH", "MEDIUM", "LOW"]):
+                    names = [t for t in tickers if ok[t].get("risk_level") == level]
+                    col.metric(f"{level.title()} Risk", len(names))
+                    col.caption(", ".join(names) if names else "None")
+                scores = [risk_to_score(l) for l in levels]
+                cols[3].metric("Avg Risk Score", f"{sum(scores) / len(scores):.1f} / 3")
 
-            # SUMMARY METRICS ROW 
-            st.divider()
-            st.subheader("Portfolio Summary")
-
-            high_risk   = [s["ticker"] for s in all_signals if s.get("risk_level") == "HIGH"]
-            medium_risk = [s["ticker"] for s in all_signals if s.get("risk_level") == "MEDIUM"]
-            low_risk    = [s["ticker"] for s in all_signals if s.get("risk_level") == "LOW"]
-            bearish     = [s["ticker"] for s in all_signals if s.get("sentiment")  == "BEARISH"]
-            bullish     = [s["ticker"] for s in all_signals if s.get("sentiment")  == "BULLISH"]
-            neutral     = [s["ticker"] for s in all_signals if s.get("sentiment")  == "NEUTRAL"]
-            avg_risk   = round(sum(risk_scores) / len(risk_scores), 2)
-
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("High Risk",    len(high_risk),
-                      delta=", ".join(high_risk) if high_risk else "None")
-            m2.metric("Medium Risk",  len(medium_risk),
-                      delta=", ".join(medium_risk[:3]) if medium_risk else "None")
-            m3.metric("Low Risk",     len(low_risk),
-                      delta=", ".join(low_risk) if low_risk else "None")
-            m4.metric("Avg Risk Score", f"{avg_risk}/3")
-
-            s1, s2, s3 = st.columns(3)
-            s1.metric("Bullish", len(bullish),
-                      delta=", ".join(bullish) if bullish else "None")
-            s2.metric("Neutral", len(neutral),
-                      delta=", ".join(neutral[:3]) if neutral else "None")
-            s3.metric("Bearish", len(bearish),
-                      delta=", ".join(bearish) if bearish else "None")
-
-            # PER COMPANY BREAKDOWN
-            st.divider()
-            st.subheader("Company Breakdown")
-
-            for sig in all_signals:
-                risk      = sig.get("risk_level", "N/A")
-                sent      = sig.get("sentiment",  "N/A")
-                rc        = {"LOW": "green", "MEDIUM": "orange", "HIGH": "red"}.get(risk, "gray")
-                sc        = {"BULLISH": "green", "NEUTRAL": "gray", "BEARISH": "red"}.get(sent, "gray")
-
-                with st.expander(
-                    f"**{sig['ticker']}** — :{rc}[{risk}] | :{sc}[{sent}]"
-                ):
-                    for i, r in enumerate(sig.get("key_risks", []), 1):
-                        st.write(f"{i}. {r}")
-                    st.caption(f"Rationale: {sig.get('rationale', 'N/A')}")
-                    if sig.get("red_flags"):
-                        for f in sig["red_flags"]:
-                            st.error(f"{f}")
+                st.divider()
+                st.subheader("Company Breakdown")
+                for t in tickers:
+                    sig = ok[t]
+                    level = sig.get("risk_level", "N/A")
+                    with st.expander(f"**{t}**: :{RISK_COLORS.get(level, 'gray')}[{level}] risk · filed {sig.get('year')}"):
+                        show_not_answerable(sig)
+                        for i, r in enumerate(sig.get("key_risks", []), 1):
+                            st.write(f"{i}. {r}")
+                        st.caption(f"Rationale: {sig.get('rationale', 'N/A')}")
+                        for f in distinct_red_flags(sig):
+                            st.error(f)
+                        show_sources(sig)
+                st.caption(SENTIMENT_NOTE)

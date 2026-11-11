@@ -8,13 +8,45 @@ inside Airflow (/opt/airflow). Override with SEC_ANALYZER_ROOT if needed.
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()  # so EMBEDDING_MODEL / RETRIEVER in .env apply before the settings below are read
+
 PROJECT_ROOT = Path(os.getenv("SEC_ANALYZER_ROOT", Path(__file__).resolve().parent.parent))
 DATA_DIR = PROJECT_ROOT / "data"                       # sec-edgar-downloader root
 FILINGS_DIR = DATA_DIR / "sec-edgar-filings"           # <TICKER>/10-K/<accession>/full-submission.txt
-INDEX_DIR = PROJECT_ROOT / "embeddings" / "faiss_index"
 RESULTS_DIR = PROJECT_ROOT / "results"
 
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"   # runs locally via sentence-transformers
+# ── Retrieval ───────────────────────────────────────────────────
+# Embedding model for the vector index. Each model gets its own index folder, so
+# you can build a Qwen index next to the MiniLM one and compare them:
+#     EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B python src/ingest.py --skip-download
+DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+
+# Qwen3-Embedding expects a one-line task instruction on queries (not on documents).
+QUERY_INSTRUCTIONS = {
+    "Qwen/Qwen3-Embedding-0.6B": "Given an analyst's question about a company's SEC 10-K filing, "
+                                 "retrieve passages from the filing that answer the question",
+}
+
+
+def index_dir_for(model: str) -> Path:
+    """embeddings/faiss_index for the default model (unchanged), embeddings/faiss_index__<model> otherwise."""
+    if model == DEFAULT_EMBEDDING_MODEL:
+        return PROJECT_ROOT / "embeddings" / "faiss_index"
+    slug = model.split("/")[-1].lower().replace(".", "_")
+    return PROJECT_ROOT / "embeddings" / f"faiss_index__{slug}"
+
+
+INDEX_DIR = index_dir_for(EMBEDDING_MODEL)
+
+# dense | bm25 | hybrid (dense + BM25 fused with reciprocal rank fusion)
+RETRIEVER = os.getenv("RETRIEVER", "hybrid")
+
+# compare_backends.py scores grounding with a fixed small model, so grounding numbers
+# don't change when you switch the retrieval embedding model.
+GROUNDING_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 FILINGS_PER_TICKER = 3
 
 SECTORS = {

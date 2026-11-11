@@ -1,15 +1,10 @@
-# environment
 .env
 __pycache__/
 *.pyc
-*.pyo
-.pytest_cache/
-
-# data (too large for GitHub)
-data/
-embeddings/
-results/
-
-# editor / OS
 .DS_Store
 .ipynb_checkpoints/
+.pytest_cache/
+data/
+embeddings/
+results/*.jsonl
+results/*.npy

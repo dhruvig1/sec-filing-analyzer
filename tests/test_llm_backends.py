@@ -13,7 +13,7 @@ VALID = {"ticker": "AAPL", "risk_level": "HIGH", "sentiment": "BEARISH",
 def test_backend_selection(monkeypatch):
     monkeypatch.setenv("LLM_BACKEND", "ollama")
     monkeypatch.delenv("OLLAMA_MODEL", raising=False)
-    assert llm.get_backend() == "ollama" and llm.get_model("ollama") == "llama3.1:8b"
+    assert llm.get_backend() == "ollama" and llm.get_model("ollama") == llm.DEFAULT_MODELS["ollama"]
     with pytest.raises(ValueError):
         llm.get_backend("openai")
 

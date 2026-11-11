@@ -1,0 +1,91 @@
+qid,ticker,year,question,retriever,grades,p_at_k,strict_p_at_k,mrr,ndcg_at_k
+1,JPM,2026,What drove changes in the provision and allowance for credit losses?,dense,"[1, 2, 2, 2, 0]",0.8,0.6,0.5,0.7884282553641707
+1,JPM,2026,What drove changes in the provision and allowance for credit losses?,bm25,"[2, 2, 2, 1, 1]",1.0,0.6,1.0,1.0
+1,JPM,2026,What drove changes in the provision and allowance for credit losses?,hybrid,"[2, 1, 2, 2, 1]",1.0,0.6,1.0,0.9444537180991301
+2,GS,2026,How do market volatility and client activity affect market-making revenues?,dense,"[2, 2, 1, 2, 1]",1.0,0.6,1.0,0.9807710461847231
+2,GS,2026,How do market volatility and client activity affect market-making revenues?,bm25,"[2, 2, 2, 1, 0]",0.8,0.6,1.0,0.946347335353756
+2,GS,2026,How do market volatility and client activity affect market-making revenues?,hybrid,"[2, 2, 2, 1, 1]",1.0,0.6,1.0,1.0
+3,BAC,2026,How sensitive is net interest income to changes in interest rates?,dense,"[1, 1, 1, 1, 1]",1.0,0.0,0.0,1.0
+3,BAC,2026,How sensitive is net interest income to changes in interest rates?,bm25,"[1, 1, 1, 1, 1]",1.0,0.0,0.0,1.0
+3,BAC,2026,How sensitive is net interest income to changes in interest rates?,hybrid,"[1, 1, 1, 1, 1]",1.0,0.0,0.0,1.0
+4,WFC,2026,What regulatory consent orders or restrictions does the company operate under?,dense,"[2, 2, 2, 1, 1]",1.0,0.6,1.0,1.0
+4,WFC,2026,What regulatory consent orders or restrictions does the company operate under?,bm25,"[2, 2, 1, 2, 0]",0.8,0.6,1.0,0.9271183815384791
+4,WFC,2026,What regulatory consent orders or restrictions does the company operate under?,hybrid,"[2, 2, 2, 1, 1]",1.0,0.6,1.0,1.0
+5,AXP,2026,What are the risks from Card Member loan credit losses and delinquencies?,dense,"[0, 0, 0, 2, 2]",0.4,0.4,0.25,0.3401497524772793
+5,AXP,2026,What are the risks from Card Member loan credit losses and delinquencies?,bm25,"[1, 2, 1, 2, 0]",0.8,0.4,0.5,0.6497381291898623
+5,AXP,2026,What are the risks from Card Member loan credit losses and delinquencies?,hybrid,"[2, 1, 2, 1, 0]",0.8,0.4,1.0,0.7713398810938545
+6,AAPL,2026,What risks come from reliance on outsourcing partners and suppliers in Asia?,dense,"[2, 2, 1, 1, 2]",1.0,0.6,1.0,0.9686152031181796
+6,AAPL,2026,What risks come from reliance on outsourcing partners and suppliers in Asia?,bm25,"[2, 1, 1, 2, 2]",1.0,0.6,1.0,0.9130689212173096
+6,AAPL,2026,What risks come from reliance on outsourcing partners and suppliers in Asia?,hybrid,"[2, 1, 2, 2, 1]",1.0,0.6,1.0,0.9444537180991301
+7,MSFT,2026,How is the company investing in AI infrastructure and datacenter capacity?,dense,"[1, 1, 0, 2, 1]",0.8,0.2,0.25,0.6688571443176244
+7,MSFT,2026,How is the company investing in AI infrastructure and datacenter capacity?,bm25,"[1, 1, 1, 0, 0]",0.6,0.0,0.0,0.43062490815403953
+7,MSFT,2026,How is the company investing in AI infrastructure and datacenter capacity?,hybrid,"[0, 1, 1, 2, 1]",0.8,0.2,0.25,0.5678155901715274
+8,NVDA,2026,How do export controls affect sales of data center products to China?,dense,"[1, 0, 0, 0, 2]",0.4,0.2,0.2,0.4736398264331053
+8,NVDA,2026,How do export controls affect sales of data center products to China?,bm25,"[1, 1, 1, 2, 0]",0.8,0.2,0.25,0.7503846658256149
+8,NVDA,2026,How do export controls affect sales of data center products to China?,hybrid,"[1, 2, 0, 1, 0]",0.6,0.2,0.5,0.7285735751249806
+9,GOOGL,2026,What antitrust lawsuits and regulatory investigations does the company face?,dense,"[1, 2, 0, 1, 0]",0.6,0.2,0.5,0.535152223085925
+9,GOOGL,2026,What antitrust lawsuits and regulatory investigations does the company face?,bm25,"[1, 1, 1, 1, 0]",0.8,0.0,0.0,0.41247582707130004
+9,GOOGL,2026,What antitrust lawsuits and regulatory investigations does the company face?,hybrid,"[1, 1, 2, 1, 2]",1.0,0.4,0.3333333333333333,0.7603739868614454
+10,META,2026,How could privacy and data protection regulation in Europe affect the business?,dense,"[1, 2, 2, 2, 2]",1.0,0.8,0.5,0.773893196484256
+10,META,2026,How could privacy and data protection regulation in Europe affect the business?,bm25,"[1, 2, 1, 1, 2]",1.0,0.4,0.5,0.5634608948312463
+10,META,2026,How could privacy and data protection regulation in Europe affect the business?,hybrid,"[1, 2, 1, 2, 2]",1.0,0.6,0.5,0.660839794726384
+11,PGR,2026,How do catastrophe losses and severe weather affect underwriting results?,dense,"[1, 2, 2, 2, 1]",1.0,0.6,0.5,0.7522198543393018
+11,PGR,2026,How do catastrophe losses and severe weather affect underwriting results?,bm25,"[2, 1, 2, 1, 2]",1.0,0.6,1.0,0.8328094783921471
+11,PGR,2026,How do catastrophe losses and severe weather affect underwriting results?,hybrid,"[1, 2, 2, 1, 1]",1.0,0.4,0.5,0.6455067540472282
+12,TRV,2026,What drove catastrophe losses and prior-year reserve development?,dense,"[1, 2, 2, 2, 2]",1.0,0.8,0.5,0.773893196484256
+12,TRV,2026,What drove catastrophe losses and prior-year reserve development?,bm25,"[2, 2, 1, 1, 2]",1.0,0.6,1.0,0.7895676983469904
+12,TRV,2026,What drove catastrophe losses and prior-year reserve development?,hybrid,"[1, 2, 2, 2, 2]",1.0,0.8,0.5,0.773893196484256
+13,AIG,2026,What risks arise from uncertainty in loss reserve estimates?,dense,"[1, 2, 2, 2, 2]",1.0,0.8,0.5,0.773893196484256
+13,AIG,2026,What risks arise from uncertainty in loss reserve estimates?,bm25,"[1, 1, 2, 2, 2]",1.0,0.6,0.3333333333333333,0.6312356866612376
+13,AIG,2026,What risks arise from uncertainty in loss reserve estimates?,hybrid,"[1, 2, 2, 2, 1]",1.0,0.6,0.5,0.6864231448093615
+14,MET,2026,How do interest rate changes affect the investment portfolio and product margins?,dense,"[2, 2, 2, 1, 1]",1.0,0.6,1.0,0.8151510484299679
+14,MET,2026,How do interest rate changes affect the investment portfolio and product margins?,bm25,"[2, 2, 0, 2, 2]",0.8,0.8,1.0,0.830419897363192
+14,MET,2026,How do interest rate changes affect the investment portfolio and product margins?,hybrid,"[2, 2, 2, 2, 0]",0.8,0.8,1.0,0.8687949224876583
+15,ALL,2026,How does the company respond to rising auto insurance loss costs with rate increases?,dense,"[1, 0, 2, 1, 0]",0.6,0.2,0.3333333333333333,0.5922402282545404
+15,ALL,2026,How does the company respond to rising auto insurance loss costs with rate increases?,bm25,"[2, 0, 0, 1, 0]",0.4,0.2,1.0,0.6932817824006374
+15,ALL,2026,How does the company respond to rising auto insurance loss costs with rate increases?,hybrid,"[2, 1, 0, 1, 1]",0.8,0.2,1.0,0.8989584458539029
+16,PFE,2026,"Which products face loss of exclusivity or patent expirations, and what is the revenue impact?",dense,"[1, 1, 1, 1, 0]",0.8,0.0,0.0,0.8687949224876582
+16,PFE,2026,"Which products face loss of exclusivity or patent expirations, and what is the revenue impact?",bm25,"[1, 1, 1, 1, 0]",0.8,0.0,0.0,0.8687949224876582
+16,PFE,2026,"Which products face loss of exclusivity or patent expirations, and what is the revenue impact?",hybrid,"[1, 1, 1, 0, 1]",0.8,0.0,0.0,0.8539316501572937
+17,LLY,2026,What are the risks around manufacturing capacity and supply for key medicines?,dense,"[0, 1, 2, 2, 0]",0.6,0.4,0.3333333333333333,0.4240706928044361
+17,LLY,2026,What are the risks around manufacturing capacity and supply for key medicines?,bm25,"[2, 2, 1, 2, 1]",1.0,0.6,1.0,0.876109927169651
+17,LLY,2026,What are the risks around manufacturing capacity and supply for key medicines?,hybrid,"[2, 1, 2, 2, 1]",1.0,0.6,1.0,0.843668133758396
+18,UNH,2026,What drove changes in medical costs and the medical care ratio?,dense,"[2, 2, 1, 1, 1]",1.0,0.4,1.0,0.8613098738256916
+18,UNH,2026,What drove changes in medical costs and the medical care ratio?,bm25,"[1, 1, 2, 2, 1]",1.0,0.4,0.3333333333333333,0.6670734657505132
+18,UNH,2026,What drove changes in medical costs and the medical care ratio?,hybrid,"[1, 2, 2, 1, 2]",1.0,0.6,0.5,0.8299250769438711
+19,ABBV,2026,How is biosimilar competition affecting Humira revenue?,dense,"[2, 2, 1, 1, 0]",0.8,0.4,1.0,0.937708058067494
+19,ABBV,2026,How is biosimilar competition affecting Humira revenue?,bm25,"[1, 2, 1, 0, 0]",0.6,0.2,0.5,0.5463148455053497
+19,ABBV,2026,How is biosimilar competition affecting Humira revenue?,hybrid,"[2, 1, 1, 1, 0]",0.8,0.2,1.0,0.7345204950565553
+20,JNJ,2026,What product liability litigation does the company face?,dense,"[1, 2, 1, 0, 0]",0.6,0.2,0.5,0.7437707309491556
+20,JNJ,2026,What product liability litigation does the company face?,bm25,"[1, 0, 2, 1, 0]",0.6,0.2,0.3333333333333333,0.6424659117539305
+20,JNJ,2026,What product liability litigation does the company face?,hybrid,"[1, 2, 0, 1, 0]",0.6,0.2,0.5,0.7285735751249806
+21,XOM,2026,How do changes in oil and natural gas prices affect earnings?,dense,"[2, 1, 1, 1, 0]",0.8,0.2,1.0,0.9218235822624828
+21,XOM,2026,How do changes in oil and natural gas prices affect earnings?,bm25,"[2, 1, 1, 1, 0]",0.8,0.2,1.0,0.9218235822624828
+21,XOM,2026,How do changes in oil and natural gas prices affect earnings?,hybrid,"[2, 1, 1, 1, 0]",0.8,0.2,1.0,0.9218235822624828
+22,CVX,2026,What climate change regulations and energy transition policies could affect the business?,dense,"[1, 2, 1, 1, 1]",1.0,0.2,0.5,0.850834274847108
+22,CVX,2026,What climate change regulations and energy transition policies could affect the business?,bm25,"[1, 1, 1, 0, 1]",0.8,0.0,0.0,0.5088013258915567
+22,CVX,2026,What climate change regulations and energy transition policies could affect the business?,hybrid,"[1, 2, 1, 1, 1]",1.0,0.2,0.5,0.850834274847108
+23,COP,2026,What are the risks related to estimates of proved oil and gas reserves?,dense,"[2, 2, 1, 2, 1]",1.0,0.6,1.0,0.9807710461847231
+23,COP,2026,What are the risks related to estimates of proved oil and gas reserves?,bm25,"[2, 2, 2, 0, 1]",0.8,0.6,1.0,0.9402694138204842
+23,COP,2026,What are the risks related to estimates of proved oil and gas reserves?,hybrid,"[2, 2, 2, 1, 1]",1.0,0.6,1.0,1.0
+24,SLB,2026,How does customer capital spending affect demand for the company's services?,dense,"[2, 2, 0, 0, 0]",0.4,0.4,1.0,1.0
+24,SLB,2026,How does customer capital spending affect demand for the company's services?,bm25,"[2, 0, 0, 0, 0]",0.2,0.2,1.0,0.6131471927654584
+24,SLB,2026,How does customer capital spending affect demand for the company's services?,hybrid,"[2, 2, 0, 0, 0]",0.4,0.4,1.0,1.0
+25,PSX,2026,How do refining margins and crack spreads affect results?,dense,"[2, 2, 2, 1, 2]",1.0,0.8,1.0,0.9026211001048624
+25,PSX,2026,How do refining margins and crack spreads affect results?,bm25,"[2, 2, 2, 2, 2]",1.0,1.0,1.0,1.0
+25,PSX,2026,How do refining margins and crack spreads affect results?,hybrid,"[2, 2, 2, 1, 2]",1.0,0.8,1.0,0.9026211001048624
+26,MCD,2026,What risks come from dependence on franchisees?,dense,"[2, 2, 2, 2, 1]",1.0,0.8,1.0,1.0
+26,MCD,2026,What risks come from dependence on franchisees?,bm25,"[2, 1, 0, 0, 0]",0.4,0.2,1.0,0.44983615161184953
+26,MCD,2026,What risks come from dependence on franchisees?,hybrid,"[2, 2, 2, 0, 2]",0.8,0.8,1.0,0.9357847944877146
+27,SBUX,2025,What drove changes in comparable store sales?,dense,"[2, 2, 1, 0, 2]",0.8,0.6,1.0,0.9088846169386638
+27,SBUX,2025,What drove changes in comparable store sales?,bm25,"[1, 2, 2, 2, 1]",1.0,0.6,0.5,0.8420809200104147
+27,SBUX,2025,What drove changes in comparable store sales?,hybrid,"[1, 2, 2, 2, 1]",1.0,0.6,0.5,0.8420809200104147
+28,NKE,2026,How is the company managing inventory levels and its wholesale and direct channels?,dense,"[0, 1, 1, 1, 0]",0.6,0.0,0.0,0.3155742573859003
+28,NKE,2026,How is the company managing inventory levels and its wholesale and direct channels?,bm25,"[1, 2, 1, 1, 1]",1.0,0.2,0.5,0.850834274847108
+28,NKE,2026,How is the company managing inventory levels and its wholesale and direct channels?,hybrid,"[1, 1, 2, 1, 1]",1.0,0.2,0.3333333333333333,0.7979168917078058
+29,WMT,2026,How could tariffs and trade policy affect costs and merchandise sourcing?,dense,"[1, 0, 1, 0, 1]",0.6,0.0,0.0,0.7365896932159578
+29,WMT,2026,How could tariffs and trade policy affect costs and merchandise sourcing?,bm25,"[1, 1, 1, 1, 0]",0.8,0.0,0.0,1.0
+29,WMT,2026,How could tariffs and trade policy affect costs and merchandise sourcing?,hybrid,"[1, 1, 1, 1, 0]",0.8,0.0,0.0,1.0
+30,COST,2026,How important are membership fees to the company's profitability?,dense,"[2, 2, 2, 1, 0]",0.8,0.6,1.0,0.946347335353756
+30,COST,2026,How important are membership fees to the company's profitability?,bm25,"[2, 2, 2, 1, 0]",0.8,0.6,1.0,0.946347335353756
+30,COST,2026,How important are membership fees to the company's profitability?,hybrid,"[2, 2, 2, 1, 1]",1.0,0.6,1.0,1.0

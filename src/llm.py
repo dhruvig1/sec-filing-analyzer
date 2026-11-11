@@ -4,17 +4,18 @@
 Select the backend with environment variables (or pass backend=/model= explicitly):
 
     LLM_BACKEND=groq      GROQ_MODEL=openai/gpt-oss-120b    (needs GROQ_API_KEY)
-    LLM_BACKEND=ollama    OLLAMA_MODEL=llama3.1:8b          (needs `ollama serve`)
+    LLM_BACKEND=ollama    OLLAMA_MODEL=qwen3:8b             (needs `ollama serve`)
 
 Groq retires model IDs over time (llama-3.3-70b-versatile was shut down on
 2026-08-16; see https://console.groq.com/docs/deprecations), so the hosted model
 is a setting, not a hard-coded name.
 
-Ollama's default tags (e.g. llama3.1:8b, qwen2.5:7b) are 4-bit quantized (Q4_K_M),
+Ollama's default tags (e.g. qwen3:8b, llama3.1:8b) are 4-bit quantized (Q4_K_M),
 so an 8B model runs in roughly 5 GB of RAM on a laptop. Filing text never leaves
 the machine when LLM_BACKEND=ollama.
 """
 import os
+import re
 import time
 from dataclasses import dataclass
 
@@ -22,7 +23,7 @@ import requests
 
 DEFAULT_MODELS = {
     "groq": "openai/gpt-oss-120b",
-    "ollama": "llama3.1:8b",
+    "ollama": "qwen3:8b",
 }
 
 # Groq on-demand prices, USD per 1M tokens (verify at https://groq.com/pricing).
@@ -41,6 +42,18 @@ REASONING_MIN_TOKENS = 4000
 
 def is_reasoning_model(model: str) -> bool:
     return model.startswith(REASONING_PREFIXES)
+
+
+# Hybrid "thinking" models on Ollama. Qwen3 reasons step by step by default, which is
+# slow and unnecessary for structured extraction, so we turn it off (OLLAMA_THINK=1
+# to turn it back on). Reasoning, if any, comes back separately from the answer.
+OLLAMA_THINKING_PREFIXES = ("qwen3",)
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S | re.I)
+
+
+def strip_thinking(text: str) -> str:
+    """Remove a <think>...</think> block some models put before the answer."""
+    return _THINK_BLOCK.sub("", text or "").strip()
 
 
 def price_for(backend: str, model: str) -> dict:
@@ -123,9 +136,14 @@ def _ollama_complete(messages, model, temperature, max_tokens, json_mode) -> LLM
         },
     }
     if json_mode:
-        payload["format"] = "json"
+        # A JSON Schema (dict) constrains decoding to exactly that structure; True just asks for any JSON.
+        payload["format"] = json_mode if isinstance(json_mode, dict) else "json"
     if is_reasoning_model(model):
         payload["options"]["num_predict"] = max(max_tokens, REASONING_MIN_TOKENS)
+    if model.startswith(OLLAMA_THINKING_PREFIXES):
+        payload["think"] = os.getenv("OLLAMA_THINK", "0") == "1"
+        if payload["think"]:
+            payload["options"]["num_predict"] = max(max_tokens, REASONING_MIN_TOKENS)
     start = time.perf_counter()
     try:
         resp = requests.post(f"{host}/api/chat", json=payload,
@@ -139,7 +157,7 @@ def _ollama_complete(messages, model, temperature, max_tokens, json_mode) -> LLM
     resp.raise_for_status()
     data = resp.json()
     return LLMResult(
-        text=data["message"]["content"],
+        text=strip_thinking(data["message"]["content"]),
         backend="ollama",
         model=model,
         latency_s=latency,

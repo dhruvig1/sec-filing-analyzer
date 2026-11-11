@@ -168,6 +168,9 @@ def backtest_signals(tickers=None, days=90, **signal_kwargs):
                 print(f"{ticker} {year}: return window incomplete or no price data, skipping")
                 continue
             signal = generate_signal(ticker, year=year, **signal_kwargs)
+            if "error" in signal:  # don't score a failed call as MEDIUM/NEUTRAL
+                print(f"{ticker} {year}: {signal['error']}, skipping")
+                continue
             risk, sent = signal.get("risk_level", "MEDIUM"), signal.get("sentiment", "NEUTRAL")
             row = {
                 "ticker": ticker, "year": year, "filing_date": filing_date,

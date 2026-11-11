@@ -12,3 +12,4 @@ boto3
 sec-edgar-downloader
 python-dotenv
 yfinance
+rank-bm25
